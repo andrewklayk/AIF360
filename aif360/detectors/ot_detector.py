@@ -5,8 +5,30 @@ from aif360.detectors.mdss.ScoringFunctions import *
 from aif360.detectors.mdss.MDSS import MDSS
 
 import pandas as pd
+import numpy as np
 
 import ot
+
+def converting_function(observations, ideal_distribution, data):
+    # Convert all datas from panda Series and DataFrame to numpy arrays
+    A = (pd.Series.to_numpy(observations)).astype(np.float)
+    B = (pd.Series.to_numpy(ideal_distribution)).astype(np.float)
+    M = (pd.DataFrame.to_numpy(data)).astype(np.float)
+    
+    # In case if our matrix is not squared, we add extra columns (rows) filled with 0
+    while len(M) > len(M[0]):
+        M = np.c_[M, np.zeros(len(M))]
+    while len(M) < len(M[0]):
+        M = np.r_[M, np.zeros(len(M[0]))]
+    
+    # Check whether the sum of datas of distributions are equal for solving the optimal transport problem
+    sumA = sum(A)
+    sumB = sum(B)
+    if sumA < sumB:
+        A[len(A) - 1] += sumB - sumA
+    elif sumA > sumB:
+        B[len(B) - 1] += sumA - sumB
+    return A, B, M
 
 def ot_bias_scan(
     data: pd.DataFrame,
@@ -95,10 +117,7 @@ def ot_bias_scan(
         ideal_distribution = pd.Series(observations.mean(), index=observations.index)
 
     # Check whether scoring correspond to "Optimal Transport"
-    assert scoring in [
-        "Optimal Transport",
-    ], f"Scoring mode can only be \"Optimal Transport\", got {scoring}."
-    scoring = scoring(**kwargs)
+    assert(scoring == "Optimal Transport"), f"Scoring mode can only be \"Optimal Transport\", got {scoring}."
 
     if mode == "binary": # Flip observations if favorable_value is 0 in binary mode.
         observations = pd.Series(observations == favorable_value, dtype=int)
@@ -136,7 +155,9 @@ def ot_bias_scan(
                 if isinstance(ideal_distribution, pd.DataFrame):
                     ideal_distribution = orig_ideal_distribution[unique]
 
-                result = ot.lp.emd(observations, ideal_distribution, data, num_iters, True)
+                A, B, M = converting_function(observations, ideal_distribution, data)
+                result = ot.lp.emd(A, B, M, num_iters, True)
                 results[unique] = result
             return results
-    return ot.lp.emd(observations, ideal_distribution, data, num_iters, True)
+    A, B, M = converting_function(observations, ideal_distribution, data)
+    return ot.lp.emd(A, B, M, num_iters, True)
