@@ -9,26 +9,24 @@ import numpy as np
 
 import ot
 
-def converting_function(observations, ideal_distribution, data):
-    # Convert all datas from panda Series and DataFrame to numpy arrays
-    A = (pd.Series.to_numpy(observations)).astype(np.float)
-    B = (pd.Series.to_numpy(ideal_distribution)).astype(np.float)
-    M = (pd.DataFrame.to_numpy(data)).astype(np.float)
+def idealize(distribution):
+    total_of_distribution = np.sum(distribution)
+    for i in range(np.size(distribution)):
+        distribution[i] /= total_of_distribution
+
+def transform(observations, ideal_distribution, data):
+    initial_distribution = (pd.Series.to_numpy(observations)).astype(np.float)
+    required_distribution = (pd.Series.to_numpy(ideal_distribution)).astype(np.float)
+
+    idealize(initial_distribution)
+    idealize(required_distribution)
     
-    # In case if our matrix is not squared, we add extra columns (rows) filled with 0
-    while len(M) > len(M[0]):
-        M = np.c_[M, np.zeros(len(M))]
-    while len(M) < len(M[0]):
-        M = np.r_[M, np.zeros(len(M[0]))]
-    
-    # Check whether the sum of datas of distributions are equal for solving the optimal transport problem
-    sumA = sum(A)
-    sumB = sum(B)
-    if sumA < sumB:
-        A[len(A) - 1] += sumB - sumA
-    elif sumA > sumB:
-        B[len(B) - 1] += sumA - sumB
-    return A, B, M
+    matrix_distance = np.empty(shape = (np.size(initial_distribution), np.size(required_distribution)))
+    for u in range(len(initial_distribution)):
+        for v in range(len(required_distribution)):
+            matrix_distance[u, v] = abs(u - v)
+
+    return initial_distribution, required_distribution, matrix_distance
 
 def ot_bias_scan(
     data: pd.DataFrame,
@@ -155,9 +153,10 @@ def ot_bias_scan(
                 if isinstance(ideal_distribution, pd.DataFrame):
                     ideal_distribution = orig_ideal_distribution[unique]
 
-                A, B, M = converting_function(observations, ideal_distribution, data)
-                result = ot.lp.emd(A, B, M, num_iters, True)
+                initial_distribution, required_distribution, matrix_distance = transform(observations, ideal_distribution, data)
+                result = ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, True)
                 results[unique] = result
             return results
-    A, B, M = converting_function(observations, ideal_distribution, data)
-    return ot.lp.emd(A, B, M, num_iters, True)
+
+    initial_distribution, required_distribution, matrix_distance = transform(observations, ideal_distribution, data)
+    return ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, True)
