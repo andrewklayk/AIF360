@@ -10,11 +10,17 @@ import numpy as np
 import ot
 
 def idealize(distribution):
+    """
+    transform distribution into distribution with total data allocation with one
+    """
     total_of_distribution = np.sum(distribution)
     for i in range(np.size(distribution)):
         distribution[i] /= total_of_distribution
 
 def transform(observations, ideal_distribution, data):
+    """
+    transoforms given distributions from pandas type to numpy arrays, and prepare them
+    """
     initial_distribution = (pd.Series.to_numpy(observations)).astype(np.float)
     required_distribution = (pd.Series.to_numpy(ideal_distribution)).astype(np.float)
 
