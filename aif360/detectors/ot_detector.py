@@ -9,23 +9,23 @@ import numpy as np
 
 import ot
 
-def idealize(distribution):
+def _normalize(distribution):
     """
-    transform distribution into distribution with total data allocation with one
+    transform distribution into distribution with total data allocation of one
     """
     total_of_distribution = np.sum(distribution)
     for i in range(np.size(distribution)):
         distribution[i] /= total_of_distribution
 
-def transform(observations, ideal_distribution, data):
+def _transform(observations, ideal_distribution, data):
     """
     transoforms given distributions from pandas type to numpy arrays, and prepare them
     """
     initial_distribution = (pd.Series.to_numpy(observations)).astype(np.float)
     required_distribution = (pd.Series.to_numpy(ideal_distribution)).astype(np.float)
 
-    idealize(initial_distribution)
-    idealize(required_distribution)
+    _normalize(initial_distribution)
+    _normalize(required_distribution)
     
     matrix_distance = np.empty(shape = (np.size(initial_distribution), np.size(required_distribution)))
     for u in range(len(initial_distribution)):
@@ -121,7 +121,7 @@ def ot_bias_scan(
         ideal_distribution = pd.Series(observations.mean(), index=observations.index)
 
     # Check whether scoring correspond to "Optimal Transport"
-    assert(scoring == "Optimal Transport"), f"Scoring mode can only be \"Optimal Transport\", got {scoring}."
+    assert scoring == "Optimal Transport", f"Scoring mode can only be \"Optimal Transport\", got {scoring}."
 
     if mode == "binary": # Flip observations if favorable_value is 0 in binary mode.
         observations = pd.Series(observations == favorable_value, dtype=int)
@@ -159,10 +159,10 @@ def ot_bias_scan(
                 if isinstance(ideal_distribution, pd.DataFrame):
                     ideal_distribution = orig_ideal_distribution[unique]
 
-                initial_distribution, required_distribution, matrix_distance = transform(observations, ideal_distribution, data)
-                result = ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, True)
+                initial_distribution, required_distribution, matrix_distance = _transform(observations, ideal_distribution, data)
+                result = ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, False)
                 results[unique] = result
             return results
-
-    initial_distribution, required_distribution, matrix_distance = transform(observations, ideal_distribution, data)
-    return ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, True)
+    
+    initial_distribution, required_distribution, matrix_distance = _transform(observations, ideal_distribution, data)
+    return ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, False)
