@@ -12,6 +12,8 @@ import ot
 def _normalize(distribution):
     """
     transform distribution into distribution with total data allocation of one
+
+    :param distribution (numpy array): nontreated distribution
     """
     total_of_distribution = np.sum(distribution)
     for i in range(np.size(distribution)):
@@ -19,14 +21,24 @@ def _normalize(distribution):
 
 def _transform(observations, ideal_distribution, data):
     """
-    transoforms given distributions from pandas type to numpy arrays, and prepare them
+    transoform given distributions from pandas type to numpy arrays, and _normalize them
+
+    :param observations (series): ground truth (correct) target values
+    :param ideal_distribution (series,  dataframe, optional): pandas series estimated targets
+        as returned by a model for binary, continuous and ordinal modes.
+    :param data (dataframe): the dataset (containing the features) the model was trained on
+
+    :returns: initial_distribution, which is an processed observations (numpy array)
+    :returns: required_distribution, which is an processed ideal_distribution (numpy array)
+    :returns: matrix_distance, which stores the distances between the cells of distributions (2d numpy array)
     """
     initial_distribution = (pd.Series.to_numpy(observations)).astype(np.float)
     required_distribution = (pd.Series.to_numpy(ideal_distribution)).astype(np.float)
 
     _normalize(initial_distribution)
     _normalize(required_distribution)
-    
+
+    # Creating the distance matrix for future obtaining optimal transport matrix
     matrix_distance = np.empty(shape = (np.size(initial_distribution), np.size(required_distribution)))
     for u in range(len(initial_distribution)):
         for v in range(len(required_distribution)):
@@ -76,7 +88,7 @@ def ot_bias_scan(
             In nominal mode, up to 10 categories are supported by default.
             To increase this, pass in keyword argument max_nominal = integer value.
 
-    :returns: the highest scoring subset and the score or dict of the highest scoring subset and the score for each category in nominal mode
+    :returns: optimal transport matrix (2d numpy array)
     """
     # Ensure correct mode is passed in.
     modes = ["binary", "continuous", "nominal", "ordinal"]
