@@ -1,10 +1,7 @@
 from typing import Union
 
-from aif360.detectors.mdss.ScoringFunctions import *
-
-from aif360.detectors.mdss.MDSS import MDSS
-
 import pandas as pd
+
 import numpy as np
 
 import ot
@@ -52,7 +49,7 @@ def ot_bias_scan(
     ideal_distribution: Union[pd.Series, pd.DataFrame] = None,
     favorable_value: Union[str, float] = None,
     overpredicted: bool = True,
-    scoring: Union[str, ScoringFunction] = "Optimal Transport",
+    scoring: str = "Optimal Transport",
     num_iters: int = 10,
     penalty: float = 1e-17,
     mode: str = "binary",
@@ -79,7 +76,6 @@ def ot_bias_scan(
         False means we scan for a group whose ideal_distribution/predictions are systematically lower than observed.
         In other words, False means we scan for a group whose observed is systematically higher than the ideal_distribution.
     :param scoring (str or class): Only 'Optimal Transport'
-            In order to use others params for scoring, it is essential to use from mdss_detector
     :param num_iters (int, optional): number of iterations (random restarts). Should be positive.
     :param penalty (float,optional): penalty term. Should be positive. The penalty term as with any regularization parameter may need to be
         tuned for ones use case. The higher the penalty, the less complex (number of features and feature values) the
