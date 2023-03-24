@@ -1,10 +1,7 @@
 import numpy as np
 import pandas as pd
 
-import sys
-sys.path.append(r'D:\work\AIF360\aif360\detectors')
-from ot_detector import ot_bias_scan
-# from aif360.detectors.ot_detector import ot_detector
+from aif360.detectors.ot_detector import ot_bias_scan
 
 def check(initial, final, expected_value, mode="ordinal", favorable_value=None, overpredicted=True):
     assert abs(sum(initial[:]) - sum(final[:])) <= 0.0001, \
