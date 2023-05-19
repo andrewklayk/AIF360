@@ -99,7 +99,6 @@ def _transform(observations, ideal_distribution, data):
         
         total_of_distribution = np.sum(required_distribution)
         required_distribution /= total_of_distribution
-        print(required_distribution[0])
 
     assert abs(sum(initial_distribution) - sum(required_distribution)) <= 0.0000001, \
         f"Datas are different, must have the same sum value! {abs(sum(initial_distribution[:]))} != {sum(required_distribution[:])}"
