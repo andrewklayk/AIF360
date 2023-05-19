@@ -33,7 +33,6 @@ d2 = rng.normal(loc=1, size=s)
 def test_normalization():
     # test normalization: must make every value non-negative
     _normalize(d1, d2)
-    print(np.sum(d1), np.sum(d2))
     assert isinstance(d1, np.ndarray)
     assert isinstance(d2, np.ndarray)
     assert np.all(d1 >= 0), "ot_detector._normalize: negatives present"
