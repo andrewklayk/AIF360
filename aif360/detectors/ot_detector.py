@@ -59,13 +59,13 @@ def _normalize(distribution1, distribution2):
     # If we encounter with negative values, we get rid of them, adding their absolute value to all elements
     if min(min(distribution), min(distribution1)) < 0:
         extra = -min(min(distribution), min(distribution1))
-        for i in range(len(distribution)):
-            distribution[i] += extra
-            distribution1[i] += extra
+        distribution += extra
+        distribution1 += extra
     distribution2 = distribution
 
     if switch:
         distribution2, distribution1 = distribution1, distribution2
+
 
 def _transform(observations, ideal_distribution, data):
     """
@@ -89,27 +89,26 @@ def _transform(observations, ideal_distribution, data):
         AssertionError: An error occur, when two distributions have totally different sizes,
                         their difference is greater than 0.0000001 after all manipulations.
     """
-    initial_distribution = (pd.Series.to_numpy(observations)).astype(np.float)
-    required_distribution = (pd.Series.to_numpy(ideal_distribution)).astype(np.float)
+    initial_distribution = (pd.Series.to_numpy(observations)).astype(float)
+    required_distribution = (pd.Series.to_numpy(ideal_distribution)).astype(float)
 
     _normalize(initial_distribution, required_distribution)
     if abs(sum(initial_distribution) - sum(required_distribution)) > 0.0000001:
         total_of_distribution = np.sum(initial_distribution)
-        for i in range(np.size(initial_distribution)):
-            initial_distribution[i] /= total_of_distribution
+        initial_distribution /= total_of_distribution
         
         total_of_distribution = np.sum(required_distribution)
-        for i in range(np.size(required_distribution)):
-            required_distribution[i] /= total_of_distribution
-        
+        required_distribution /= total_of_distribution
+
     assert abs(sum(initial_distribution) - sum(required_distribution)) <= 0.0000001, \
         f"Datas are different, must have the same sum value! {abs(sum(initial_distribution[:]))} != {sum(required_distribution[:])}"
 
     # Creating the distance matrix for future obtaining optimal transport matrix
-    matrix_distance = np.empty(shape = (np.size(initial_distribution), np.size(required_distribution)))
-    for u in range(len(initial_distribution)):
-        for v in range(len(required_distribution)):
-            matrix_distance[u, v] = abs(u - v)
+    d1_ = np.tile(range(len(initial_distribution)), len(initial_distribution))
+    d2_ = np.repeat(range(len(required_distribution)), len(required_distribution))
+    matrix_distance = np.reshape(np.abs(d1_ - d2_),
+                                 newshape=(len(initial_distribution), len(required_distribution))
+                                 ).astype(float)
 
     return initial_distribution, required_distribution, matrix_distance
 
@@ -224,6 +223,6 @@ def ot_bias_scan(
                 result = ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, True)[1]["cost"]
                 results[unique] = result
             return results
-    
     initial_distribution, required_distribution, matrix_distance = _transform(observations, ideal_distribution, data)
+    
     return ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, True)[1]["cost"]
