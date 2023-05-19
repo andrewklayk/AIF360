@@ -1,98 +1,69 @@
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 
-from aif360.detectors.ot_detector import ot_bias_scan
+from aif360.datasets import AdultDataset
 
-def check(initial, final, expected_value, mode="ordinal", favorable_value=None, overpredicted=True):
-    assert abs(sum(initial[:]) - sum(final[:])) <= 0.0001, \
-        f"Datas are different, must have the same sum value! {sum(initial[:])} != {sum(final[:])}"
-    res = ot_bias_scan(observations=initial, ideal_distribution=final, 
-                       favorable_value=favorable_value, overpredicted=overpredicted, mode=mode)
-    assert abs(res - expected_value) < 0.0000001, \
-        f"The values do not match! Expected {expected_value}, but got {res}"
-    print("TEST PASSED")
+from aif360.detectors.ot_detector import ot_bias_scan, _normalize, _transform
 
-def test0():
-    init_data = {"Empty": 0}
-    end_data = {"Empty": 0}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 0
-    check(initial, final, expected_value)
+# create a subset of the AdultDataset to test on and a set of predictions
 
-def test1():
-    init_data = {"Cat": 14, "Dog": 23, "Fish": 8}
-    end_data = {"Cat": 15, "Dog": 16, "Fish": 14}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 7
-    check(initial, final, expected_value)
+ad = AdultDataset(protected_attribute_names=['race', 'sex', 'native-country'],
+                  privileged_classes=[['White'], ['Male'], ['United-States']],
+                  categorical_features=['workclass', 'education',
+                          'marital-status', 'occupation', 'relationship'],
+                  custom_preprocessing=lambda df: df.fillna('Unknown'))
+adult_test, adult_train = ad.split([16281], shuffle=False)
+adult_train = adult_train.subset(range(1000))
+adult_test = adult_test.subset(range(500))
+scaler = StandardScaler()
+X = scaler.fit_transform(adult_train.features)
+test_X = scaler.transform(adult_test.features)
+clf = LogisticRegression(C=1.0, random_state=0, solver='liblinear')
+adult_pred = adult_test.copy()
+adult_pred.labels = clf.fit(X, adult_train.labels.ravel()).predict(test_X)
 
-def test2():
-    init_data = {"Bottle 1": 12.4, "Bottle 2": 4.3, "Bottle 3": 38.26, "Bottle 4": 21.14, "Bottle 5": 8.9}
-    end_data = {"Bottle 1": 17, "Bottle 2": 17, "Bottle 3": 17, "Bottle 4": 17, "Bottle 5": 17}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 33.96
-    check(initial, final, expected_value)
-
-def test3():
-    init_data = {"January": 95.89, "Febuary": -26.28, "March": -9.67, "April": 25.74, "May": 56.40, "June": -20.9, 
-                "July": -59.17, "August": 6.15, "September": -54.26, "October": 38.77, "November": 38.96, "December": -0.74}
-    end_data = {"January": 11.14, "Febuary": 16.3, "March": -12.25, "April": 48.72, "May": -51.48, "June": -10.32, 
-                "July": -0.23, "August": 17.6, "September": -23.33, "October": 13.38, "November": 51.67, "December": 29.69}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 642.29
-    check(initial, final, expected_value)
-
-def test4():
-    init_data = {0: 105.41751589143566, 1: -279.90626557631117, 2: 635.0683774379818, 3: 251.1221088327333, 4: 448.77098271495805, 5: 517.9042047261698, 6: 398.5836128520691, 7: 196.20387854448828, 8: 131.149425661516, 9: -49.313841085040615}
-    end_data = {0: 237.66968240668567, 1: -544.778111408537, 2: 869.28182441595, 3: -1112.1404735810463, 4: 1390.0744460186522, 5: -501.3887201540594, 6: 243.22781074611106, 7: -172.62185585793216, 8: 1057.714355185456, 9: 887.9610422287196}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 7584.286830610824
-    check(initial, final, expected_value)
-
-def test5():
-    init_data = {0: 0, 1: 1, 2: 1, 3: 0, 4: 0}
-    end_data = {0: 0.4793187959759956, 1: 0.4022045809764221, 2: 0.5190645039240965, 3: 0.568800185245431, 4: 0.030611933878054703}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 1.2278194720251183
-    check(initial, final, expected_value, "binary")
-
-def test6():
-    init_data = {0: 0.1, 1: 0.2, 2: 0.3, 3: 0.4, 4: 0.5}
-    end_data = {0: 0.5, 1: 0.4, 2: 0.3, 3: 0.2, 4: 0.1}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 2.0
-    check(initial, final, expected_value, "continuous", "high")
-
-def test7():
-    init_data = {0: 0.1, 1: 0.2, 2: 0.3, 3: 0.4, 4: 0.5}
-    end_data = {0: -0.19, 1: 3.0, 2: -1.31}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 4.2
-    check(initial, final, expected_value, "continuous", "low", False)
-
-def test8():
-    init_data = {0: 0.4, 1: 0.6}
-    end_data = {0: 0.3, 1: 0.7}
-    initial = pd.Series(data=init_data)
-    final = pd.Series(data=end_data)
-    expected_value = 0.7
-    check(initial, final, expected_value, "nominal", "low", False)
+rng = np.random.default_rng(seed = 42)
+s = 100
+d1 = rng.normal(loc=0, size=s)
+d2 = rng.normal(loc=1, size=s)
 
 
-test0()
-test1()
-test2()
-test3()
-test4()
-test5()
-test6()
-test7()
-test8()
+def test_normalization():
+    # test normalization: must make every value non-negative
+    _normalize(d1, d2)
+    print(np.sum(d1), np.sum(d2))
+    assert isinstance(d1, np.ndarray)
+    assert isinstance(d2, np.ndarray)
+    assert np.all(d1 >= 0), "ot_detector._normalize: negatives present"
+    assert np.all(d2 >= 0), "ot_detector._normalize: negatives present"
+
+def test_transform():
+    # check if transform returns np.ndarrays, makes sums equal
+    s = 100
+    d1 = pd.Series(rng.normal(loc=0, size=s))
+    d2 = pd.Series(rng.normal(loc=10, size=s))
+    d1_, d2_, dist_ = _transform(d1, d2, None)
+
+    assert isinstance(d1_, np.ndarray)
+    assert isinstance(d2_, np.ndarray)
+    assert abs(np.sum(d1_) - np.sum(d2_)) < 1e-6, "ot_detector._transform: sums differ"
+
+def test_diff_distance():
+    # check wasserstein distance against POT implementation
+    actual = ot_bias_scan(observations=pd.Series(adult_test.labels.flatten()),
+                 ideal_distribution=pd.Series(adult_pred.labels.flatten()),
+                 favorable_value=adult_test.favorable_label,
+                 mode='binary', num_iters=10000)
+    expected = 10.564426877470353
+    assert abs(actual - expected) <= 1e-6, f"WD must be {expected}, got {actual}"
+    
+def test_same_distance():
+    # check returns 0 for same data
+    actual = ot_bias_scan(observations=pd.Series(adult_pred.labels.flatten()),
+                 ideal_distribution=pd.Series(adult_pred.labels.flatten()),
+                 favorable_value=adult_test.favorable_label,
+                 mode='binary', num_iters=100000)
+    expected = 0
+    assert abs(actual - expected) <= 1e-6, f"WD must be {expected}, got {actual}"
