@@ -6,115 +6,46 @@ import numpy as np
 
 import ot
 
-def _normalize(distribution1, distribution2):
-    """
-    Transform distributions to pleasure form, that is their sums are equal with precise at least 0.0000001
-    and in case if there is negative values, increase all values with absolute value of smallest number.
-
-    Args:
-        distribution1 (numpy array): nontreated distribution
-        distribution2 (numpy array): nontreated distribution
-    """
-    switch = False
-    if sum(distribution2) < sum(distribution1):
-        switch = True
-        distribution2, distribution1 = distribution1, distribution2
-
-    sum1 = np.sum(distribution1)
-    sum2 = 0
-    
-    distribution = distribution2
-    for i in range(len(distribution2)):
-        distribution[i] = float(format(distribution2[i], '.10f'))
-        sum2 += distribution[i]
-    
-    # Trying to make two distributions make equal, changing the precision of values
-    for val in range(9, 0, -1):
-        if abs(sum1 - sum2) < 0.0000001:
-            break
-        if sum2 <= sum1:
-            break
-        for i in range(len(distribution2)):
-            if distribution[i] < float(format(distribution2[i], f'.{val}f')): 
-                continue
-            sum2 -= distribution[i]
-            sum2 += float(format(distribution2[i], f'.{val}f'))
-            if sum2 < sum1 and abs(sum1 - sum2) > 0.0000001:
-                sum2 += distribution[i]
-                sum2 -= float(format(distribution2[i], f'.{val}f'))
-                continue
-
-            distribution[i] = float(format(distribution2[i], f'.{val}f'))
-            if sum2 <= sum1:
-                break
-    if sum2 < sum1 and abs(sum1 - sum2) > 0.0000001:
-        need = sum1 - sum2
-        val = np.max(distribution)
-        for i in range(0, np.size(distribution)):
-            if distribution[i] != val:
-                continue
-            distribution[i] += need
-            break
-    
-    # If we encounter with negative values, we get rid of them, adding their absolute value to all elements
-    if min(min(distribution), min(distribution1)) < 0:
-        extra = -min(min(distribution), min(distribution1))
-        distribution += extra
-        distribution1 += extra
-    distribution2 = distribution
-
-    if switch:
-        distribution2, distribution1 = distribution1, distribution2
-
-
-def _transform(observations, ideal_distribution, data):
+def _transform(golden_standart, classifier, data):
     """
     Transoform given distributions from pandas type to numpy arrays, and _normalize them.
-
-    In case, if the datas are different even after multiple operations, 
-    it rearanges distributions, with totall data allocated of one.
+    Rearanges distributions, with totall data allocated of one.
+    Generates matrix distance with respect to (golden_standart[i] - classifier[j])^2.
 
     Args:
-        observations (series): ground truth (correct) target values
-        ideal_distribution (series,  dataframe, optional): pandas series estimated targets
+        golden_standart (series): ground truth (correct) target values
+        classifier (series,  dataframe, optional): pandas series estimated targets
             as returned by a model for binary, continuous and ordinal modes.
         data (dataframe): the dataset (containing the features) the model was trained on
 
     Returns:
-        initial_distribution, which is an processed observations (numpy array)
-        required_distribution, which is an processed ideal_distribution (numpy array)
+        initial_distribution, which is an processed golden_standart (numpy array)
+        required_distribution, which is an processed classifier (numpy array)
         matrix_distance, which stores the distances between the cells of distributions (2d numpy array)
     
     Raises:
-        AssertionError: An error occur, when two distributions have totally different sizes,
-                        their difference is greater than 0.0000001 after all manipulations.
+        AssertionError: An error occur, when two distributions have different dimensions
     """
-    initial_distribution = (pd.Series.to_numpy(observations)).astype(float)
-    required_distribution = (pd.Series.to_numpy(ideal_distribution)).astype(float)
+    assert np.size(golden_standart) == np.size(classifier), \
+        f"Sizes of golden_standart ({np.size(golden_standart)}) and classifier ({np.size(classifier)}) are different"
+    
+    initial_distribution = (pd.Series.to_numpy(golden_standart)).astype(float)
+    required_distribution = (pd.Series.to_numpy(classifier)).astype(float)
 
-    _normalize(initial_distribution, required_distribution)
-    if abs(sum(initial_distribution) - sum(required_distribution)) > 0.0000001:
-        total_of_distribution = np.sum(initial_distribution)
-        initial_distribution /= total_of_distribution
-        
-        total_of_distribution = np.sum(required_distribution)
-        required_distribution /= total_of_distribution
+    total_of_initial_distribution = np.sum(initial_distribution)
+    initial_distribution /= total_of_initial_distribution
+    total_of_required_distribution = np.sum(required_distribution)
+    required_distribution /= total_of_required_distribution
 
-    assert abs(sum(initial_distribution) - sum(required_distribution)) <= 0.0000001, \
-        f"Datas are different, must have the same sum value! {abs(sum(initial_distribution[:]))} != {sum(required_distribution[:])}"
-
-    # Creating the distance matrix for future obtaining optimal transport matrix
-    d1_ = np.tile(range(len(initial_distribution)), len(initial_distribution))
-    d2_ = np.repeat(range(len(required_distribution)), len(required_distribution))
-    matrix_distance = np.reshape(np.abs(d1_ - d2_),
-                                 newshape=(len(initial_distribution), len(required_distribution))
-                                 ).astype(float)
-
+    matrix_distance = np.array([(i - required_distribution)**2 for i in initial_distribution], dtype=float)
+    Mstar = np.max(matrix_distance)
+    matrix_distance /= Mstar
+    
     return initial_distribution, required_distribution, matrix_distance
 
 def ot_bias_scan(
-    observations: pd.Series,
-    ideal_distribution: Union[pd.Series, pd.DataFrame],
+    golden_standart: pd.Series,
+    classifier: Union[pd.Series, pd.DataFrame],
     data: pd.DataFrame = None,
     favorable_value: Union[str, float] = None,
     overpredicted: bool = True,
@@ -130,23 +61,23 @@ def ot_bias_scan(
     After all, solves the optimal transport problem.
 
     Args:
-        observations (series): ground truth (correct) target values
-        ideal_distribution (series,  dataframe, optional): pandas series estimated targets
+        golden_standart (series): ground truth (correct) target values
+        classifier (series,  dataframe, optional): pandas series estimated targets
             as returned by a model for binary, continuous and ordinal modes.
-            If mode is nominal, this is a dataframe with columns containing ideal_distribution for each nominal class.
+            If mode is nominal, this is a dataframe with columns containing classifier for each nominal class.
             If None, model is assumed to be a dumb model that predicts the mean of the targets
                     or 1/(num of categories) for nominal mode.
         data (dataframe): the dataset (containing the features) the model was trained on
         favorable_value(str, float, optional): Should be high or low or float if the mode in [binary, ordinal, or continuous].
-                If float, value has to be minimum or maximum in the observations column. Defaults to high if None for these modes.
+                If float, value has to be minimum or maximum in the golden_standart column. Defaults to high if None for these modes.
                 Support for float left in to keep the intuition clear in binary classification tasks.
-                If mode is nominal, favorable values should be one of the unique categories in the observations.
+                If mode is nominal, favorable values should be one of the unique categories in the golden_standart.
                 Defaults to a one-vs-all scan if None for nominal mode.
         overpredicted (bool, optional): flag for group to scan for.
-            True means we scan for a group whose ideal_distribution/predictions are systematically higher than observed.
-            In other words, True means we scan for a group whose observeed is systematically lower than the ideal_distribution.
-            False means we scan for a group whose ideal_distribution/predictions are systematically lower than observed.
-            In other words, False means we scan for a group whose observed is systematically higher than the ideal_distribution.
+            True means we scan for a group whose classifier/predictions are systematically higher than observed.
+            In other words, True means we scan for a group whose observeed is systematically lower than the classifier.
+            False means we scan for a group whose classifier/predictions are systematically lower than observed.
+            In other words, False means we scan for a group whose observed is systematically higher than the classifier.
         scoring (str or class): Only 'Optimal Transport'
         num_iters (int, optional): number of iterations (random restarts). Should be positive.
         penalty (float, optional): penalty term. Should be positive. The penalty term as with any regularization parameter may need to be
@@ -174,13 +105,13 @@ def ot_bias_scan(
     assert mode in ['binary', 'continuous', 'nominal', 'ordinal'], \
         f"Expected one of {['binary', 'continuous', 'nominal', 'ordinal']}, got {mode}."
     
-    # Set ideal_distribution to mean targets for non-nominal modes
-    if ideal_distribution is None and mode != "nominal":
-        ideal_distribution = pd.Series(observations.mean(), index=observations.index)
+    # Set classifier to mean targets for non-nominal modes
+    if classifier is None and mode != "nominal":
+        classifier = pd.Series(golden_standart.mean(), index=golden_standart.index)
 
     # Set correct favorable value (this tells us if higher or lower is better)
-    min_val, max_val = observations.min(), observations.max()
-    uniques = list(observations.unique())
+    min_val, max_val = golden_standart.min(), golden_standart.max()
+    uniques = list(golden_standart.unique())
 
     if favorable_value == 'high':
         favorable_value = max_val
@@ -195,34 +126,34 @@ def ot_bias_scan(
     assert favorable_value in [min_val, max_val, "flag-all", *uniques,], \
         f"Favorable_value should be high, low, or one of categories {uniques}, got {favorable_value}."
 
-    if mode == "binary": # Flip observations if favorable_value is 0 in binary mode.
-        observations = pd.Series(observations == favorable_value, dtype=int)
+    if mode == "binary": # Flip golden_standart if favorable_value is 0 in binary mode.
+        golden_standart = pd.Series(golden_standart == favorable_value, dtype=int)
     elif mode == "nominal":
-        unique_outs = set(sorted(observations.unique()))
+        unique_outs = set(sorted(golden_standart.unique()))
         size_unique_outs = len(unique_outs)
-        if ideal_distribution is None: # Set ideal_distribution to 1/(num of categories) for nominal mode
-            ideal_distribution = pd.Series(1 / observations.nunique(), index=observations.index)
+        if classifier is None: # Set classifier to 1/(num of categories) for nominal mode
+            classifier = pd.Series(1 / golden_standart.nunique(), index=golden_standart.index)
 
         if favorable_value != "flag-all": # If favorable flag is set, use one-vs-others strategy to scan, else use one-vs-all strategy
-            observations = observations.map({favorable_value: 1})
-            observations = observations.fillna(0)
-            if isinstance(ideal_distribution, pd.DataFrame):
-                ideal_distribution = ideal_distribution[favorable_value]
+            golden_standart = golden_standart.map({favorable_value: 1})
+            golden_standart = golden_standart.fillna(0)
+            if isinstance(classifier, pd.DataFrame):
+                classifier = classifier[favorable_value]
         else:
             results = {}
-            orig_observations = observations.copy()
-            orig_ideal_distribution = ideal_distribution.copy()
+            orig_golden_standart = golden_standart.copy()
+            orig_classifier = classifier.copy()
             for unique in uniques:
-                observations = orig_observations.map({unique: 1})
-                observations = observations.fillna(0)
+                golden_standart = orig_golden_standart.map({unique: 1})
+                golden_standart = golden_standart.fillna(0)
 
-                if isinstance(ideal_distribution, pd.DataFrame):
-                    ideal_distribution = orig_ideal_distribution[unique]
+                if isinstance(classifier, pd.DataFrame):
+                    classifier = orig_classifier[unique]
 
-                initial_distribution, required_distribution, matrix_distance = _transform(observations, ideal_distribution, data)
-                result = ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, True)[1]["cost"]
+                initial_distribution, required_distribution, matrix_distance = _transform(golden_standart, classifier, data)
+                result = ot.emd2(a=initial_distribution, b=required_distribution, M=matrix_distance, numItermax=num_iters)
                 results[unique] = result
             return results
-    initial_distribution, required_distribution, matrix_distance = _transform(observations, ideal_distribution, data)
     
-    return ot.emd(initial_distribution, required_distribution, matrix_distance, num_iters, True)[1]["cost"]
+    initial_distribution, required_distribution, matrix_distance = _transform(golden_standart, classifier, data)
+    return ot.emd2(a=initial_distribution, b=required_distribution, M=matrix_distance, numItermax=num_iters)
