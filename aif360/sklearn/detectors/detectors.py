@@ -65,8 +65,8 @@ def ot_bias_scan(
         AssertionError: If mode == "nominal" and size_unique_outs > max_nominal
     """
     return ot_bias_scan(
-        observations=y_true,
-        ideal_distribution=y_pred,
+        golden_standart=y_true,
+        classifier=y_pred,
         data=X,
         favorable_value=pos_label,
         overpredicted=overpredicted,
