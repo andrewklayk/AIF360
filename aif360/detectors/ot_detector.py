@@ -6,6 +6,25 @@ import numpy as np
 
 import ot
 
+def _normalize(distribution1, distribution2):
+    """
+    Transform distributions to pleasure form, that is their sums are equal to 1,
+    and in case if there is negative values, increase all values with absolute value of smallest number.
+
+    Args:
+        distribution1 (numpy array): nontreated distribution
+        distribution2 (numpy array): nontreated distribution
+    """
+    if np.minimum(np.min(distribution1), np.min(distribution2)) < 0:
+        extra = -np.minimum(np.min(distribution1), np.min(distribution2))
+        distribution1 += extra
+        distribution2 += extra
+    
+    total_of_distribution1 = np.sum(distribution1)
+    distribution1 /= total_of_distribution1
+    total_of_distribution2 = np.sum(distribution2)
+    distribution2 /= total_of_distribution2
+
 def _transform(golden_standart, classifier, data):
     """
     Transoform given distributions from pandas type to numpy arrays, and _normalize them.
@@ -32,10 +51,7 @@ def _transform(golden_standart, classifier, data):
     initial_distribution = (pd.Series.to_numpy(golden_standart)).astype(float)
     required_distribution = (pd.Series.to_numpy(classifier)).astype(float)
 
-    total_of_initial_distribution = np.sum(initial_distribution)
-    initial_distribution /= total_of_initial_distribution
-    total_of_required_distribution = np.sum(required_distribution)
-    required_distribution /= total_of_required_distribution
+    _normalize(initial_distribution, required_distribution)
 
     matrix_distance = np.array([(i - required_distribution)**2 for i in initial_distribution], dtype=float)
     Mstar = np.max(matrix_distance)
