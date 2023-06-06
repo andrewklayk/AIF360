@@ -63,8 +63,13 @@ class TestInternalFuncs(TestCase):
         # check if ot_bias_scan raises an error when getting wrong input types
         p = np.zeros(4)
         q = np.zeros(4)
+        C = pd.DataFrame()
         with self.assertRaises(AssertionError):
-            ot_bias_scan(p, q)
+            ot_bias_scan(p, pd.Series(q))
+        with self.assertRaises(AssertionError):
+            ot_bias_scan(pd.Series(p), q)
+        with self.assertRaises(AssertionError):
+            ot_bias_scan(pd.Series(p), pd.Series(q), C)
 
 class TestResults():
     def test_quant(self):
