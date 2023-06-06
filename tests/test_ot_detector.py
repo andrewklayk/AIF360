@@ -46,6 +46,8 @@ class TestInternalFuncs(TestCase):
         assert isinstance(d2, np.ndarray), f"_normalize must keep inputs as ndarray, got {type(d2)}"
         assert np.all(d1 >= 0), "_normalize: negatives present in distribution 1"
         assert np.all(d2 >= 0), "_normalize: negatives present in distribution 2"
+        assert abs(np.sum(d1) - 1) < 1e-6, "_normalize: distribution 1 must sum to 1"
+        assert abs(np.sum(d2) - 1) < 1e-6, "_normalize: distribution 2 must sum to 1"
 
     def test_transform(self):
         # check if transform returns np.ndarrays, makes sums equal
@@ -58,15 +60,23 @@ class TestInternalFuncs(TestCase):
         print(dist_)
         assert np.all(np.abs(dist - dist_)) < 1e-6, "_transform distance matrix not calculated correctly"
 
+    def test_ot_bias_scan(self):
+        # check if ot_bias_scan raises an error when getting wrong input types
+        p = np.zeros(4)
+        q = np.zeros(4)
+        with self.assertRaises(TypeError):
+            ot_bias_scan(p, q)
+
 class TestResults():
     def test_quant(self):
-        # check against https://python.quantecon.org/opt_transport.html
+        # check against example in https://python.quantecon.org/opt_transport.html
+        # with precalculated cost matrix
         p = np.array([50, 100, 150])
         q = np.array([25, 115, 60, 30, 70])
         C = np.array([[10, 15, 20, 20, 40], 
                       [20, 40, 15, 30, 30], 
                       [30, 35, 40, 55, 25]])
-        expected = 7225.0
+        expected = 24.08
         pass
 
     def test_values_normal(self):
