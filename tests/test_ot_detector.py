@@ -34,8 +34,6 @@ class TestInputChecks(TestCase):
     def test_wrong_mode(self):
         with self.assertRaises(Exception):
             ot_bias_scan(sd1, sd2, mode="Categorical")
-    def test_wrong_fav(self):
-        pass
 
 class TestInternalFuncs(TestCase):
     def test_normalization(self):
