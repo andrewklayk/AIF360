@@ -25,7 +25,7 @@ def _normalize(distribution1, distribution2):
     total_of_distribution2 = np.sum(distribution2)
     distribution2 /= total_of_distribution2
 
-def _transform(golden_standart, classifier, data):
+def _transform(golden_standart, classifier, data, cost_matrix=None):
     """
     Transoform given distributions from pandas type to numpy arrays, and _normalize them.
     Rearanges distributions, with totall data allocated of one.
@@ -41,27 +41,22 @@ def _transform(golden_standart, classifier, data):
         initial_distribution, which is an processed golden_standart (numpy array)
         required_distribution, which is an processed classifier (numpy array)
         matrix_distance, which stores the distances between the cells of distributions (2d numpy array)
-    
-    Raises:
-        AssertionError: An error occur, when two distributions have different dimensions
     """
-    assert np.size(golden_standart) == np.size(classifier), \
-        f"Sizes of golden_standart ({np.size(golden_standart)}) and classifier ({np.size(classifier)}) are different"
-    
     initial_distribution = (pd.Series.to_numpy(golden_standart)).astype(float)
     required_distribution = (pd.Series.to_numpy(classifier)).astype(float)
 
     _normalize(initial_distribution, required_distribution)
 
-    matrix_distance = np.array([(i - required_distribution)**2 for i in initial_distribution], dtype=float)
-    Mstar = np.max(matrix_distance)
-    matrix_distance /= Mstar
-    
+    if cost_matrix is not None:
+        matrix_distance = cost_matrix
+    else:
+        matrix_distance = np.array([abs(i - required_distribution) for i in initial_distribution], dtype=float)
     return initial_distribution, required_distribution, matrix_distance
 
 def ot_bias_scan(
     golden_standart: pd.Series,
     classifier: Union[pd.Series, pd.DataFrame],
+    cost_matrix: np.array = None,
     data: pd.DataFrame = None,
     favorable_value: Union[str, float] = None,
     overpredicted: bool = True,
@@ -104,15 +99,26 @@ def ot_bias_scan(
                 To increase this, pass in keyword argument max_nominal = integer value.
 
     Returns:
-        ot.emd (float): Earth mover's distance
+        ot.emd2 (float): Earth mover's distance
 
     Raises:
+        AssertionError: If golden_standart is the type pandas.Series and classifier is the type pandas.Series or pandas.DataFrame
+        AssertionError: If cost_matrix is the type numpy.array
         AssertionError: If scoring variable is not "Optimal Transport"
         AssertionError: If type mode does not belong to any, of the possible options 
                         ["binary", "continuous", "nominal", "ordinal"].
         AssertionError: If favorable_value does not belong to any, of the possible options 
                         [min_val, max_val, "flag-all", *uniques].
     """
+    # Inspect whether the types are correct for golden_standart and classifier
+    assert isinstance(golden_standart, pd.Series) and (isinstance(classifier, pd.Series) or isinstance(classifier, pd.DataFrame)), \
+        f"The type of golden_standart should be pandas.Series and classifier should be pandas.Series or pandas.DataFrame, but obtained {type(golden_standart)}, {type(classifier)}."
+    
+    if cost_matrix is not None:
+        # Inspect whether the type is correct for cost_matrix
+        assert isinstance(cost_matrix, np.array), \
+            f"The type of cost_matrix should be numpy.array, but obtained {type(cost_matrix)}"
+    
     # Check whether scoring correspond to "Optimal Transport"
     assert scoring == "Optimal Transport", \
         f"Scoring mode can only be \"Optimal Transport\", got {scoring}."
@@ -171,5 +177,5 @@ def ot_bias_scan(
                 results[unique] = result
             return results
     
-    initial_distribution, required_distribution, matrix_distance = _transform(golden_standart, classifier, data)
+    initial_distribution, required_distribution, matrix_distance = _transform(golden_standart, classifier, data, cost_matrix)
     return ot.emd2(a=initial_distribution, b=required_distribution, M=matrix_distance, numItermax=num_iters)
