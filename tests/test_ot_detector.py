@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from aif360.detectors.ot_detector import ot_bias_scan, _normalize, _transform
+from aif360.detectors.ot_detector import ot_bias_scan, _normalize, _transform, evaluate
 from ot import emd2
 import unittest
 from unittest import TestCase
@@ -55,17 +55,31 @@ class TestInternalFuncs(TestCase):
         assert abs(s1 - s2) < 1e-6, f"_transform must return arrays with equal sums, got {s1} and {s2}"
         assert np.all(np.abs(dist - dist_)) < 1e-6, "_transform distance matrix not calculated correctly"
 
-    def test_ot_bias_scan(self):
-        # check if ot_bias_scan raises an error when getting wrong input types
-        p = np.zeros(4)
-        q = np.zeros(4)
-        C = pd.DataFrame()
+    def test_ot_bias_scan_types(self):
+        # check if ot_bias_scan raises an error when passed wrong input types
+        df = pd.DataFrame([[1,1], [2,2], [3,3]], columns=['d1','d2'])
         with self.assertRaises(AssertionError):
-            ot_bias_scan(p, pd.Series(q))
-        with self.assertRaises(AssertionError):
-            ot_bias_scan(pd.Series(p), q)
-        with self.assertRaises(AssertionError):
-            ot_bias_scan(pd.Series(p), pd.Series(q), C)
+            ot_bias_scan(golden_standard=['d1','d2'], classifier='d2', data=df)
+
+    # def test_ot_bias_scan_colnames(self):
+    #     # check if ot_bias_scan raises an error when passed non-existant column names
+    #     df = pd.DataFrame([[1,1], [2,2], [3,3]], columns=['d1','d2'])
+    #     with self.assertRaises(AssertionError, "golden_standard column does not exist"):
+    #         ot_bias_scan(golden_standard='d3', classifier='d2', data=df)
+    #     with self.assertRaises(AssertionError, "classifier column does not exist"):
+    #         ot_bias_scan(golden_standard='d1', classifier='d3', data=df)
+
+class TestEvaluate(TestCase):
+    # must raise AssertionError if first distribution has more or less than 2 values
+    def test_many_target_values(self):
+        df = pd.DataFrame([[1,1], [2,2], [3,3]], columns=['d1','d2'])
+        with self.assertRaises(Exception):
+            evaluate(golden_standard='d1', classifier='d2', data=df, num_iters=1000)
+    def test_one_target_value(self):
+        df = pd.DataFrame([[1,1], [1,2], [1,3]], columns=['d1','d2'])
+        with self.assertRaises(Exception):
+            evaluate(golden_standard='d1', classifier='d2', data=df, num_iters=1000)
+    
 
 class TestResults():
     def test_quant(self):
