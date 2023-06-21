@@ -133,8 +133,8 @@ def ot_bias_scan(
         ground_truth (pd.Series): ground truth (correct) target values
         classifier (pd.Series): estimated target values \
             as returned by a model for binary, continuous and ordinal modes.
-            If mode is nominal, this is a dataframe with columns containing classifier for each nominal class.
-            If None, model is assumed to be a dumb model that predicts the mean of the targets
+            If mode is nominal, this is a dataframe with columns containing predictions for each nominal class.
+            If None, model is assumed to be a dummy model that predicts the mean of the targets
                     or 1/(num of categories) for nominal mode.
         data (dataframe, optional): the dataset (containing the features) the model was trained on.
         favorable_value(str, float, optional): Either "high", "low" or a float value if the mode in [binary, ordinal, or continuous].

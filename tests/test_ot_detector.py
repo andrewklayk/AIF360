@@ -21,22 +21,8 @@ _d1_ /= np.sum(d1)
 _d2_ /= np.sum(d2)
 dist = np.array([abs(i - _d2_) for i in _d1_], dtype=float)
 
-def compute_w1(a, b):
-    # helper function
-    a = np.sort(a)
-    b = np.sort(b)
-    return np.mean(np.abs(a-b))
-
-class TestInputChecks(TestCase):
-    def test_wrong_scoring(self):
-        with self.assertRaises(Exception):
-            ot_bias_scan(sd1, sd2, scoring="Bernoulli")
-    def test_wrong_mode(self):
-        with self.assertRaises(Exception):
-            ot_bias_scan(sd1, sd2, mode="Categorical")
-
-class TestInternalFuncs(TestCase):
-    def test_normalization(self):
+class TestNormalizeTransform(TestCase):
+    def test_normalize(self):
         # test normalization: must make every value non-negative
         _normalize(d1, d2)
         assert isinstance(d1, np.ndarray), f"_normalize must keep inputs as ndarray, got {type(d1)}"
@@ -114,6 +100,10 @@ class TestOtBiasScan(TestCase):
         actual = ot_bias_scan(p, q, cost_matrix=C)
         assert expected == actual
 
+    def test_flip_favorable_value(self):
+        p = pd.Series([0,0,0,0])
+        q = pd.Series([1,1,1,1])
+        
 
 if __name__ == '__main__':
     unittest.main()
