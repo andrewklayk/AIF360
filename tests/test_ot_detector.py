@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from aif360.detectors.ot_detector import ot_bias_scan, _normalize, _transform, evaluate
+from aif360.detectors.ot_detector import ot_bias_scan, _normalize, _transform, _evaluate
 from ot import emd2
 import unittest
 from unittest import TestCase
@@ -55,34 +55,8 @@ class TestInternalFuncs(TestCase):
         assert abs(s1 - s2) < 1e-6, f"_transform must return arrays with equal sums, got {s1} and {s2}"
         assert np.all(np.abs(dist - dist_)) < 1e-6, "_transform distance matrix not calculated correctly"
 
-    def test_ot_bias_scan_types(self):
-        # check if ot_bias_scan raises an error when passed wrong input types
-        df = pd.DataFrame([[1,1], [2,2], [3,3]], columns=['d1','d2'])
-        with self.assertRaises(AssertionError):
-            ot_bias_scan(golden_standard=['d1','d2'], classifier='d2', data=df)
-
-    # def test_ot_bias_scan_colnames(self):
-    #     # check if ot_bias_scan raises an error when passed non-existant column names
-    #     df = pd.DataFrame([[1,1], [2,2], [3,3]], columns=['d1','d2'])
-    #     with self.assertRaises(AssertionError, "golden_standard column does not exist"):
-    #         ot_bias_scan(golden_standard='d3', classifier='d2', data=df)
-    #     with self.assertRaises(AssertionError, "classifier column does not exist"):
-    #         ot_bias_scan(golden_standard='d1', classifier='d3', data=df)
-
-class TestEvaluate(TestCase):
-    # must raise AssertionError if first distribution has more or less than 2 values
-    def test_many_target_values(self):
-        df = pd.DataFrame([[1,1], [2,2], [3,3]], columns=['d1','d2'])
-        with self.assertRaises(Exception):
-            evaluate(golden_standard='d1', classifier='d2', data=df, num_iters=1000)
-    def test_one_target_value(self):
-        df = pd.DataFrame([[1,1], [1,2], [1,3]], columns=['d1','d2'])
-        with self.assertRaises(Exception):
-            evaluate(golden_standard='d1', classifier='d2', data=df, num_iters=1000)
-    
-
-class TestResults():
-    def test_quant(self):
+class TestEvaluate():
+    def test_evaluate_quantecon(self):
         # check against example in https://python.quantecon.org/opt_transport.html
         # with normalization
         p = pd.Series([50, 100, 150])
@@ -91,36 +65,55 @@ class TestResults():
                       [20, 40, 15, 30, 30], 
                       [30, 35, 40, 55, 25]])
         expected = 24.083333
-        actual = ot_bias_scan(p, q, cost_matrix=C)
+        actual = _evaluate(p, q, cost_matrix=C)
         assert abs(expected - actual) < 1e-6
 
-    def test_values_normal(self):
+    def test_evaluate_normal(self):
         # check against PyOptimalTransport's EMD2
         a_ = d1/np.sum(d1)
         b_ = d2/np.sum(d2)
         dist = np.array([abs(i - b_) for i in a_], dtype=float)
         expected = emd2(a_, b_, dist)
-        actual = ot_bias_scan(sd1, sd2, num_iters = 100000)
+        actual = _evaluate(sd1, sd2, num_iters = 100000)
         assert abs(expected-actual) < 1e-3, f"EMD must be {expected}, got {actual}"
 
     # check properties of a metric
-    def test_same(self):
+    def test_evaluate_same(self):
         # emd(x, x) = 0
         expected = 0
-        actual = ot_bias_scan(sd1, sd1, num_iters = 1000)
+        actual = _evaluate(sd1, sd1, num_iters = 1000)
         assert abs(expected - actual) < 1e-8, f"EMD between two equal distributions must be 0, got {actual}"
 
-    def test_symmetry(self):
-        a = ot_bias_scan(sd1, sd2, num_iters = 1000)
-        b = ot_bias_scan(sd2, sd1, num_iters = 1000)
+    def test_evaluate_symmetry(self):
+        a = _evaluate(sd1, sd2, num_iters = 1000)
+        b = _evaluate(sd2, sd1, num_iters = 1000)
         assert abs(a - b) < 1e-8, f"EMD must be symmetric, got {a} and {b}"
 
-    def test_triangle(self):
+    def test_evaluate_triangle(self):
         d3 = pd.Series(rng.normal(loc=2, size=s))
-        a = ot_bias_scan(sd1, sd2, num_iters = 1000)
-        b = ot_bias_scan(sd2, d3, num_iters = 1000)
-        c = ot_bias_scan(sd1, d3, num_iters = 1000)
+        a = _evaluate(sd1, sd2, num_iters = 1000)
+        b = _evaluate(sd2, d3, num_iters = 1000)
+        c = _evaluate(sd1, d3, num_iters = 1000)
         assert a + b >= c, f"EMD must satisfy triangle inequality"
+
+class TestOtBiasScan(TestCase):
+    C_df = pd.DataFrame()
+    def test_scoring_checked(self):
+        with self.assertRaises(Exception):
+            ot_bias_scan(pd.Series(), pd.Series(), scoring="Bernoulli")
+    def test_scan_mode_checked(self):
+        with self.assertRaises(Exception):
+            ot_bias_scan(pd.Series, pd.Series(), mode="Wrong")
+    def test_cost_matrix_passed_correctly(self):
+        p = pd.Series([50, 100, 150])
+        q = pd.Series([25, 115, 60, 30, 70])
+        C = np.array([[10, 15, 20, 20, 40], 
+                      [20, 40, 15, 30, 30], 
+                      [30, 35, 40, 55, 25]])
+        expected = _evaluate(p, q, cost_matrix=C)
+        actual = ot_bias_scan(p, q, cost_matrix=C)
+        assert expected == actual
+
 
 if __name__ == '__main__':
     unittest.main()
