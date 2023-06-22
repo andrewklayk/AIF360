@@ -184,18 +184,23 @@ def ot_bias_scan(
         grt = data[ground_truth].copy()
     else:
         grt = ground_truth.copy()
+ 
     if isinstance(classifier, str): # classifier
         assert isinstance(data, pd.DataFrame), f"if classifier is a string, data must be pd.DataFrame; got {type(data)}"
         cls = data[classifier].copy()
     elif classifier is not None:
         cls = classifier.copy()
+        cls.index = grt.index
     else:
         cls = None
+
     if isinstance(sensitive_attribute, str): # sensitive attribute
         assert isinstance(data, pd.DataFrame), f"if sensitive_attribute is a string, data must be pd.DataFrame; got {type(data)}"
         sat = data[sensitive_attribute].copy()
+        sat.index = grt.index
     elif sensitive_attribute is not None:
         sat = sensitive_attribute.copy()
+        sat.index = grt.index
     else:
         sat = None
 
@@ -240,11 +245,11 @@ def ot_bias_scan(
         if cls is None:
             cls = pd.Series(grt.mean(), index=grt.index)
     
-    elif mode == "nominal":
+    elif mode in ["nominal", "ordinal"]:
         unique_outs = set(sorted(grt.unique()))
         size_unique_outs = len(unique_outs)
         if cls is None: # Set classifier to 1/(num of categories) for nominal mode
-            cls = pd.Series(1 / grt.nunique(), index=grt.index)
+            cls = pd.DataFrame([pd.Series(1 / grt.nunique(), index=grt.index)]*grt.nunique())
 
         if favorable_value != "flag-all": # If favorable flag is set, use one-vs-others strategy to scan, else use one-vs-all strategy
             grt = grt.map({favorable_value: 1})
@@ -253,16 +258,10 @@ def ot_bias_scan(
                 cls = cls[favorable_value]
         else:
             emds = {}
-            orig_ground_truth = grt.copy()
-            orig_classifier = cls.copy()
             for class_label in uniques:
-                grt = orig_ground_truth.map({class_label: 1})
-                grt = grt.fillna(0)
-                # probably don't need this - if mode is nominal, we know it's a dataframe
-                # if isinstance(cls, pd.DataFrame):
-                #     cls = orig_classifier[class_label]
-
-                emds[class_label] = _evaluate(grt, cls, sat, num_iters, **kwargs)
+                grt_cl = grt.map({class_label: 1}).fillna(0)
+                cls_cl = cls[class_label]
+                emds[class_label] = _evaluate(grt_cl, cls_cl, sat, num_iters, **kwargs)
             return emds
     
     emds = _evaluate(grt, cls, sat, data, num_iters, **kwargs)
