@@ -142,6 +142,18 @@ class TestOtBiasScan(TestCase):
         with self.assertRaises(ValueError):
             ot_bias_scan(p, q, favorable_value=fav)
 
+    def test_nominal_classifier_shape_checked(self):
+        p = pd.Series([0,0,1,1])
+        q = pd.DataFrame([0.5,0.5,0.5,0.5])
+        with self.assertRaises(ValueError):
+            ot_bias_scan(p, q, mode='nominal')
+    
+    def test_ordinal_classifier_shape_checked(self):
+        p = pd.Series([0,0,1,1])
+        q = pd.DataFrame([0.5,0.5,0.5,0.5])
+        with self.assertRaises(ValueError):
+            ot_bias_scan(p, q, mode='ordinal')
+
     def test_nominal(self):
         p = pd.Series([0,0,1,1])
         q = pd.DataFrame([[0.5,0.5],[0.5,0.5],[0.5,0.5],[0.5,0.5]])

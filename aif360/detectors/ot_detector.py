@@ -262,6 +262,9 @@ def ot_bias_scan(
     elif mode in  ["nominal", "ordinal"]:
         if cls is None: # Set classifier to 1/(num of categories) for nominal mode
             cls = pd.DataFrame([pd.Series(1 / grt.nunique(), index=grt.index)]*grt.nunique())
+        if grt.nunique() != cls.shape[-1]:
+            raise ValueError(
+                f"classifier must have  a column for each class. Expected shape [:, {grt.nunique()}], got {cls.shape}")
         emds = {}
         for class_label in uniques:
             grt_cl = grt.map({class_label: 1}).fillna(0)
