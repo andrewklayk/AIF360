@@ -42,6 +42,7 @@ class TestNormalizeTransform(TestCase):
         assert np.all(np.abs(dist - dist_)) < 1e-6, "_transform distance matrix not calculated correctly"
 
 class TestEvaluate():
+
     def test_evaluate_quantecon(self):
         # check against example in https://python.quantecon.org/opt_transport.html
         # with normalization
@@ -81,15 +82,49 @@ class TestEvaluate():
         b = _evaluate(sd2, d3, num_iters = 1000)
         c = _evaluate(sd1, d3, num_iters = 1000)
         assert a + b >= c, f"EMD must satisfy triangle inequality"
+    
+    def test_binary(self):
+        p = pd.Series([0,1,0,1])
+        q = pd.Series([0.7,0.7,0.3,0.3])
+        s = pd.Series([0,0,1,1])
+        expected = {sv: _evaluate(p[s==sv], q[s==sv]) for sv in s}
+        actual = _evaluate(p, q, s)
+        assert expected == actual
 
 class TestOtBiasScan(TestCase):
-    C_df = pd.DataFrame()
     def test_scoring_checked(self):
         with self.assertRaises(Exception):
             ot_bias_scan(pd.Series(), pd.Series(), scoring="Bernoulli")
     def test_scan_mode_checked(self):
         with self.assertRaises(Exception):
-            ot_bias_scan(pd.Series, pd.Series(), mode="Wrong")
+            ot_bias_scan(pd.Series(), pd.Series(), mode="Wrong")
+
+    def test_classifier_type_checked(self):
+        with self.assertRaises(Exception):
+            ot_bias_scan(pd.Series(), pd.Series(), mode="nominal")
+        with self.assertRaises(Exception):
+            ot_bias_scan(pd.Series(), pd.Series(), mode="ordinal")
+        with self.assertRaises(Exception):
+            ot_bias_scan(pd.Series(), pd.DataFrame(), mode="binary")
+        with self.assertRaises(Exception):
+            ot_bias_scan(pd.Series(), pd.DataFrame(), mode="continuous")
+
+    def test_data_requested_for_string(self):
+        with self.assertRaises(TypeError):
+            ot_bias_scan('a', pd.Series())
+        with self.assertRaises(TypeError):
+            ot_bias_scan(pd.Series(), 'b')
+        with self.assertRaises(TypeError):
+            ot_bias_scan(pd.Series(), pd.Series(), 'c')
+
+    def test_binary_nuniques_checked(self):
+        with self.assertRaises(Exception):
+            ot_bias_scan(pd.Series([1,2,3], pd.Series(), mode='binary'))
+    
+    def test_cost_matrix_type_checked(self):
+        with self.assertRaises(TypeError):
+            ot_bias_scan(pd.Series(), pd.Series(), cost_matrix=pd.DataFrame())
+
     def test_cost_matrix_passed_correctly(self):
         p = pd.Series([50, 100, 150])
         q = pd.Series([25, 115, 60, 30, 70])
@@ -97,13 +132,23 @@ class TestOtBiasScan(TestCase):
                       [20, 40, 15, 30, 30], 
                       [30, 35, 40, 55, 25]])
         expected = _evaluate(p, q, cost_matrix=C)
-        actual = ot_bias_scan(p, q, cost_matrix=C)
+        actual = ot_bias_scan(p, q, cost_matrix=C, mode="continuous")
         assert expected == actual
 
-    def test_flip_favorable_value(self):
-        p = pd.Series([0,0,0,0])
-        q = pd.Series([1,1,1,1])
-        
+    def test_favorable_value_checked(self):
+        p = pd.Series([50, 100, 150])
+        q = pd.Series([25, 115, 60, 30, 70])
+        fav = 4
+        with self.assertRaises(ValueError):
+            ot_bias_scan(p, q, favorable_value=fav)
+
+    def test_nominal(self):
+        p = pd.Series([0,0,1,1])
+        q = pd.DataFrame([[0.5,0.5],[0.5,0.5],[0.5,0.5],[0.5,0.5]])
+        expected = {cl: _evaluate(p, q[cl]) for cl in [0,1]}
+        actual = ot_bias_scan(p, q, mode="nominal")
+        assert expected == actual
+
 
 if __name__ == '__main__':
     unittest.main()

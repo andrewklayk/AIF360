@@ -20,13 +20,15 @@ def _normalize(distribution1, distribution2):
         distribution2 += extra
     
     total_of_distribution1 = np.sum(distribution1)
-    distribution1 /= total_of_distribution1
+    if total_of_distribution1 != 0:
+        distribution1 /= total_of_distribution1
     total_of_distribution2 = np.sum(distribution2)
-    distribution2 /= total_of_distribution2
+    if total_of_distribution2 != 0:
+        distribution2 /= total_of_distribution2
 
 def _transform(ground_truth, classifier, data, cost_matrix=None):
     """
-    Transoform given distributions from pandas type to numpy arrays, and _normalize them.
+    Transform given distributions from pandas type to numpy arrays, and _normalize them.
     Rearanges distributions, with totall data allocated of one.
     Generates matrix distance with respect to (ground_truth[i] - classifier[j])^2.
 
@@ -56,8 +58,8 @@ def _transform(ground_truth, classifier, data, cost_matrix=None):
 def _evaluate(
         ground_truth: pd.Series,
         classifier: pd.Series,
-        sensitive_attribute: pd.Series,
-        data=None,
+        sensitive_attribute: pd.Series=None,
+        data: pd.DataFrame=None,
         num_iters=1e5,
         **kwargs):
     """If the given golden_standart and classifier are distributions, it returns the Wasserstein distance between them, 
@@ -97,8 +99,8 @@ def _evaluate(
         initial_distribution, required_distribution, matrix_distance = _transform(ground_truth, classifier, data, kwargs.get("cost_matrix"))
         return ot.emd2(a=initial_distribution, b=required_distribution, M=matrix_distance, numItermax=num_iters)
     
-    assert ground_truth.nunique() == 2, \
-        f"Expected to have exactly 2 target values, got {len(set(data[ground_truth]))}."
+    if not ground_truth.nunique() == 2:
+        raise ValueError(f"Expected to have exactly 2 target values, got {len(set(data[ground_truth]))}.")
     
     # Calculate EMD between ground truth distribution and distribution of each group
     emds = {}
@@ -122,7 +124,7 @@ def ot_bias_scan(
     scoring: str = "Optimal Transport",
     num_iters: int = 1e5,
     penalty: float = 1e-17,
-    mode: str = "ordinal",
+    mode: str = "binary",
     **kwargs,
 ):
     """Calculated the Wasserstein distance for two given distributions.
@@ -138,9 +140,9 @@ def ot_bias_scan(
                 or list of corresponding column names in `data`.
             If `None`, model is assumed to be a dummy model that predicts the mean of the targets \
                 or 1/(number of categories) for nominal mode.
-        sensitive_attribute (pd.Series, str): sensitive attribute values. \
+        sensitive_attribute (pd.Series, str): sensitive attribute values.
             If `str`, must denote the column in `data` in which the sensitive attrbute values are stored.
-            If `None`, will calculate the Earth Mover's distance between ground_truth and classifier.
+            If `None`, assume all samples belong to the same protected group.
         data (dataframe, optional): the dataset (containing the features) the model was trained on.
         favorable_value(str, float, optional): Either "high", "low" or a float value if the mode in [binary, ordinal, or continuous].
                 If float, value has to be the minimum or the maximum in the ground_truth column.
@@ -152,8 +154,8 @@ def ot_bias_scan(
             `True` scans for overprediction, `False` scans for underprediction.
         scoring (str or class): only 'Optimal Transport'
         num_iters (int, optional): number of iterations (random restarts) for EMD. Should be positive.
-        penalty (float, optional): penalty term. Should be positive. The penalty term as with any regularization parameter may need to be
-            tuned for ones use case. The higher the penalty, the higher the influence of entropy regualizer.
+        penalty (float, optional): penalty term. Should be positive. The penalty term as with any regularization parameter \
+            may need to be tuned for a particular use case. The higher the penalty, the higher the influence of entropy regualizer.
         mode: one of ['binary', 'continuous', 'nominal', 'ordinal']. Defaults to binary.
                 In nominal mode, up to 10 categories are supported by default.
                 To increase this, pass in keyword argument max_nominal = integer value.
@@ -162,40 +164,55 @@ def ot_bias_scan(
         ot.emd2 (float, dict): Earth mover's distance or dictionary of optimal transports for each of option of classifier
 
     Raises:
-        AssertionError: If ground_truth is the type pandas.Series or str and classifier is the type pandas.Series or pandas.DataFrame or str.
-        AssertionError: If cost_matrix is presented and its type is numpy.ndarray.
-        AssertionError: If scoring variable is not "Optimal Transport".
-        AssertionError: If type mode does not belong to any, of the possible options 
-                        ["binary", "continuous", "nominal", "ordinal"].
-        AssertionError: If golden distribution is presented as pandas.Series and favorable_value does not belong to any, of the possible options 
-                        [min_val, max_val, "flag-all", *uniques].
+        ValueError: if `mode` is 'binary' but `ground_truth` contains less than 1 or more than 2 unique values.
     """
+
+    # Assert correct mode passed
+    if mode not in ['binary', 'continuous', 'nominal', 'ordinal']:
+        raise ValueError(f"Expected one of {['binary', 'continuous', 'nominal', 'ordinal']}, got {mode}.")
+    
     # Assert correct types passed to ground_truth, classifier and sensitive_attribute
-    assert isinstance(ground_truth, (pd.Series, str)), \
-        f"ground_truth: expected pd.Series or str, got {type(ground_truth)}"
-    assert classifier is None or isinstance(classifier, (pd.Series,pd.DataFrame, str, None)), \
-        f"classifier: expected pd.Series, pd.Dataframe or str, got {type(classifier)}"
-    assert sensitive_attribute is None or isinstance(sensitive_attribute, (pd.Series, str)), \
-        f"sensitive_attribute: expected pd.Series or str, got {type(sensitive_attribute)}"
+    if not isinstance(ground_truth, (pd.Series, str)):
+        raise TypeError(f"ground_truth: expected pd.Series or str, got {type(ground_truth)}")
+    if classifier is not None:
+        if mode in ["binary", "continuous"] and not isinstance(classifier, pd.Series):
+            raise TypeError(f"classifier: expected pd.Series for {mode} mode, got {type(classifier)}")
+        if mode in ["nominal", "ordinal"] and not isinstance(classifier, pd.DataFrame):
+            raise TypeError(f"classifier: expected pd.DataFrame for {mode} mode, got {type(classifier)}")
+    if sensitive_attribute is not None and not isinstance(sensitive_attribute, (pd.Series, str)):
+        raise TypeError(f"sensitive_attribute: expected pd.Series or str, got {type(sensitive_attribute)}")
+    
+    # Assert correct type passed to cost_matrix
+    if kwargs.get("cost_matrix") is not None:
+        if not isinstance(kwargs.get("cost_matrix"), np.ndarray):
+            raise TypeError(f"cost_matrix: expected numpy.ndarray, got {type(kwargs.get('cost_matrix'))}")
+    
+    # Assert scoring is "Optimal Transport"
+    if not scoring == "Optimal Transport":
+        raise ValueError(f"Scoring mode can only be \"Optimal Transport\", got {scoring}")
     
     # If any of input data arguments passed as str, retrieve the values from data
     if isinstance(ground_truth, str): # ground truth
-        assert isinstance(data, pd.DataFrame), f"if ground_truth is a string, data must be pd.DataFrame; got {type(data)}"
+        if not isinstance(data, pd.DataFrame):
+            raise TypeError(f"if ground_truth is a string, data must be pd.DataFrame; got {type(data)}")
         grt = data[ground_truth].copy()
     else:
         grt = ground_truth.copy()
  
     if isinstance(classifier, str): # classifier
-        assert isinstance(data, pd.DataFrame), f"if classifier is a string, data must be pd.DataFrame; got {type(data)}"
+        if not isinstance(data, pd.DataFrame):
+            raise TypeError(f"if classifier is a string, data must be pd.DataFrame; got {type(data)}")
         cls = data[classifier].copy()
     elif classifier is not None:
         cls = classifier.copy()
-        cls.index = grt.index
+        if sensitive_attribute is not None:
+            cls.index = grt.index
     else:
         cls = None
 
     if isinstance(sensitive_attribute, str): # sensitive attribute
-        assert isinstance(data, pd.DataFrame), f"if sensitive_attribute is a string, data must be pd.DataFrame; got {type(data)}"
+        if not isinstance(data, pd.DataFrame):
+            raise TypeError(f"if sensitive_attribute is a string, data must be pd.DataFrame; got {type(data)}")
         sat = data[sensitive_attribute].copy()
         sat.index = grt.index
     elif sensitive_attribute is not None:
@@ -203,19 +220,11 @@ def ot_bias_scan(
         sat.index = grt.index
     else:
         sat = None
-
-    # Assert correct type passed to cost_matrix
-    if kwargs.get("cost_matrix") is not None:
-        assert isinstance(kwargs.get("cost_matrix"), np.ndarray), \
-            f"cost_matrix: expected numpy.ndarray, got {type(kwargs.get('cost_matrix'))}"
     
-    # Assert scoring is "Optimal Transport"
-    assert scoring == "Optimal Transport", \
-        f"Scoring mode can only be \"Optimal Transport\", got {scoring}."
-
-    # Assert correct mode passed
-    assert mode in ['binary', 'continuous', 'nominal', 'ordinal'], \
-        f"Expected one of {['binary', 'continuous', 'nominal', 'ordinal']}, got {mode}."
+    uniques = list(grt.unique())
+    if mode == "binary":
+        if len(uniques) > 2:
+            raise ValueError(f"Only 2 unique values allowed in ground_truth for binary mode, got {uniques}")
 
     # Encode variables
     if not pd.api.types.is_any_real_numeric_dtype(grt.dtype):
@@ -224,7 +233,6 @@ def ot_bias_scan(
 
     # Set correct favorable value (this tells us if higher or lower is better)
     min_val, max_val = grt.min(), grt.max()
-    uniques = list(grt.unique())
 
     if favorable_value == 'high':
         favorable_value = max_val
@@ -236,33 +244,28 @@ def ot_bias_scan(
         elif mode == "nominal":
             favorable_value = "flag-all" # Default to scan through all categories
 
-    assert favorable_value in [min_val, max_val, "flag-all", *uniques,], \
-        f"Favorable_value should be high, low, or one of categories {uniques}, got {favorable_value}."
+    if favorable_value not in [min_val, max_val, "flag-all", *uniques,]:
+        raise ValueError(f"Favorable_value should be high, low, or one of categories {uniques}, got {favorable_value}.")
 
     if mode == "binary": # Flip ground truth if favorable_value is 0 in binary mode.
         grt = pd.Series(grt == favorable_value, dtype=int)
-        # If classifier is None, assume dummy model predicting means
         if cls is None:
             cls = pd.Series(grt.mean(), index=grt.index)
-    
-    elif mode in ["nominal", "ordinal"]:
-        unique_outs = set(sorted(grt.unique()))
-        size_unique_outs = len(unique_outs)
+        emds = _evaluate(grt, cls, sat, data, num_iters, **kwargs)
+
+    elif mode == "continuous":
+        if cls is None:
+            cls = pd.Series(grt.mean(), index=grt.index)
+        emds = _evaluate(grt, cls, sat, data, num_iters, **kwargs)
+
+    ## TODO: rework ordinal mode to take into account distance between pred and true
+    elif mode in  ["nominal", "ordinal"]:
         if cls is None: # Set classifier to 1/(num of categories) for nominal mode
             cls = pd.DataFrame([pd.Series(1 / grt.nunique(), index=grt.index)]*grt.nunique())
+        emds = {}
+        for class_label in uniques:
+            grt_cl = grt.map({class_label: 1}).fillna(0)
+            cls_cl = cls[class_label]
+            emds[class_label] = _evaluate(grt_cl, cls_cl, sat, num_iters, **kwargs)
 
-        if favorable_value != "flag-all": # If favorable flag is set, use one-vs-others strategy to scan, else use one-vs-all strategy
-            grt = grt.map({favorable_value: 1})
-            grt = grt.fillna(0)
-            if isinstance(cls, pd.DataFrame):
-                cls = cls[favorable_value]
-        else:
-            emds = {}
-            for class_label in uniques:
-                grt_cl = grt.map({class_label: 1}).fillna(0)
-                cls_cl = cls[class_label]
-                emds[class_label] = _evaluate(grt_cl, cls_cl, sat, num_iters, **kwargs)
-            return emds
-    
-    emds = _evaluate(grt, cls, sat, data, num_iters, **kwargs)
     return emds
